@@ -1,0 +1,13 @@
+{
+  "name": "vulnerable-device-sim",
+  "version": "1.0.0",
+  "description": "Simulated IoT device that authenticates with a hardcoded secret, no replay protection",
+  "main": "index.js",
+  "type": "module",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "mqtt": "^5.10.0"
+  }
+}

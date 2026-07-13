@@ -1,0 +1,14 @@
+{
+  "name": "vulnerable-server",
+  "version": "1.0.0",
+  "description": "Vulnerable IoT auth server, no replay protection, no zero knowledge proof",
+  "main": "src/index.js",
+  "type": "module",
+  "scripts": {
+    "start": "node src/index.js"
+  },
+  "dependencies": {
+    "express": "^4.19.0",
+    "mqtt": "^5.10.0"
+  }
+}
