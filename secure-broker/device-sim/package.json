@@ -1,0 +1,14 @@
+{
+  "name": "secure-device-sim",
+  "version": "1.0.0",
+  "description": "Simulated IoT device that authenticates using Schnorr zero knowledge proofs",
+  "main": "index.js",
+  "type": "module",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "mqtt": "^5.10.0",
+    "schnorr-zkp-toolkit": "^0.1.0"
+  }
+}

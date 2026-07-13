@@ -26,3 +26,29 @@ services:
       - vulnerable-mosquitto
     environment:
       - MQTT_BROKER_URL=mqtt://vulnerable-mosquitto:1883
+
+  secure-mosquitto:
+    image: eclipse-mosquitto:2
+    container_name: secure-mosquitto
+    ports:
+      - "1885:1883"
+    volumes:
+      - ./secure-broker/mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf
+
+  secure-server:
+    build: ./secure-broker/server
+    container_name: secure-server
+    ports:
+      - "3002:3000"
+    depends_on:
+      - secure-mosquitto
+    environment:
+      - MQTT_BROKER_URL=mqtt://secure-mosquitto:1883
+
+  secure-device-sim:
+    build: ./secure-broker/device-sim
+    container_name: secure-device-sim
+    depends_on:
+      - secure-mosquitto
+    environment:
+      - MQTT_BROKER_URL=mqtt://secure-mosquitto:1883
