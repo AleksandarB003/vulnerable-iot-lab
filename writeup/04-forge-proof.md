@@ -2,7 +2,7 @@
 
 ## What this tests
 
-After fixing the previous two bugs, wanted to confirm the actual core promise of the whole system, can someone authenticate as a device without ever knowing its private key, even if they have access to everything else that's public (the group parameters, the public key, and even the ability to request a nonce like a real device would)?
+After fixing the previous two bugs, i wanted to confirm the actual core promise of the whole system, can someone authenticate as a device without ever knowing its private key, even if they have access to everything else that's public (the group parameters, the public key, and even the ability to request a nonce like a real device would)?
 
 This is really the whole point of using zero knowledge proofs in the first place, so this test mattered more than the others.
 
