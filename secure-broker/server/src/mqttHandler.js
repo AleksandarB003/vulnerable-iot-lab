@@ -29,6 +29,13 @@ export function startMqttListener(brokerUrl) {
     }
 
     if (action === "register") {
+      const existing = getDevice(deviceId);
+
+      if (existing) {
+        console.log(`Device ${deviceId} attempted to re-register, ignoring (already registered)`);
+        return;
+      }
+
       const params = parsePublicParams(message.params);
       const publicKey = BigInt(message.publicKey);
 
