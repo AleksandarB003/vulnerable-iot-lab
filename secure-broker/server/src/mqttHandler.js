@@ -46,6 +46,12 @@ export function startMqttListener(brokerUrl) {
 
     if (action === "nonce-request") {
       const nonce = issueNonce(deviceId);
+
+      if (!nonce) {
+        console.log(`Device ${deviceId} requested a nonce too soon, rate limiting`);
+        return;
+      }
+
       client.publish(`devices/${deviceId}/nonce`, JSON.stringify({ nonce }));
       console.log(`Issued nonce to device ${deviceId}`);
       return;

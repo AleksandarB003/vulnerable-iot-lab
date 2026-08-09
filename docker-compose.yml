@@ -4,6 +4,7 @@ services:
   vulnerable-mosquitto:
     image: eclipse-mosquitto:2
     container_name: vulnerable-mosquitto
+    profiles: ["vulnerable"]
     ports:
       - "1884:1883"
     volumes:
@@ -12,6 +13,7 @@ services:
   vulnerable-server:
     build: ./vulnerable-broker/server
     container_name: vulnerable-server
+    profiles: ["vulnerable"]
     ports:
       - "3001:3000"
     depends_on:
@@ -22,6 +24,7 @@ services:
   vulnerable-device-sim:
     build: ./vulnerable-broker/device-sim
     container_name: vulnerable-device-sim
+    profiles: ["vulnerable"]
     depends_on:
       - vulnerable-mosquitto
     environment:
@@ -30,6 +33,7 @@ services:
   secure-mosquitto:
     image: eclipse-mosquitto:2
     container_name: secure-mosquitto
+    profiles: ["secure"]
     ports:
       - "1885:1883"
     volumes:
@@ -38,6 +42,7 @@ services:
   secure-server:
     build: ./secure-broker/server
     container_name: secure-server
+    profiles: ["secure"]
     ports:
       - "3002:3000"
     depends_on:
@@ -48,6 +53,7 @@ services:
   secure-device-sim:
     build: ./secure-broker/device-sim
     container_name: secure-device-sim
+    profiles: ["secure"]
     depends_on:
       - secure-mosquitto
     environment:

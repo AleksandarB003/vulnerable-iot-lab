@@ -34,7 +34,8 @@ client.on("connect", () => {
 
   client.publish(
     `devices/${deviceId}/register`,
-    JSON.stringify(registrationMessage, bigIntReplacer)
+    JSON.stringify(registrationMessage, bigIntReplacer),
+    { retain: true }
   );
 
   console.log(`Device ${deviceId} sent registration`);
