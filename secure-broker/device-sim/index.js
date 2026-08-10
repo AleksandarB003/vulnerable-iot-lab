@@ -1,72 +1,140 @@
 import mqtt from "mqtt";
+import express from "express";
 import { writeFileSync } from "fs";
 import { generateParams, generateKeyPair, prove } from "schnorr-zkp-toolkit";
 
-const deviceId = process.env.DEVICE_ID || "device-1";
 const brokerUrl = process.env.MQTT_BROKER_URL || "mqtt://localhost:1883";
+const CONTROL_PORT = 4000;
+
+const initialDeviceIds = (process.env.DEVICE_IDS || process.env.DEVICE_ID || "device-1")
+  .split(",")
+  .map((id) => id.trim())
+  .filter(Boolean);
+
+const runningDevices = new Set();
 
 function bigIntReplacer(key, value) {
   return typeof value === "bigint" ? value.toString() : value;
 }
 
-function readTemperature() {
-  const base = 22;
-  const variation = (Math.random() * 4 - 2).toFixed(1);
-  return parseFloat(base) + parseFloat(variation);
-}
+function startDevice(deviceId, options = {}) {
+  const tempBase = typeof options.temperature === "number" ? options.temperature : 22;
+  const humidityBase = typeof options.humidity === "number" ? options.humidity : 45;
+  let batteryLevel = typeof options.battery === "number" ? options.battery : 100;
 
-console.log(`Device ${deviceId} generating key pair, this may take a moment...`);
+  function readTemperature() {
+    const variation = (Math.random() * 4 - 2).toFixed(1);
+    return parseFloat((tempBase + parseFloat(variation)).toFixed(1));
+  }
 
-const params = generateParams(128);
-const keyPair = generateKeyPair(params);
+  function readHumidity() {
+    const variation = (Math.random() * 10 - 5).toFixed(1);
+    return parseFloat((humidityBase + parseFloat(variation)).toFixed(1));
+  }
 
-console.log(`Device ${deviceId} key pair ready`);
+  function readBattery() {
+    batteryLevel = Math.max(0, batteryLevel - Math.random() * 0.05);
+    return parseFloat(batteryLevel.toFixed(1));
+  }
 
-const client = mqtt.connect(brokerUrl);
+  console.log(`Device ${deviceId} generating key pair, this may take a moment...`);
 
-client.on("connect", () => {
-  console.log(`Device ${deviceId} connected to broker`);
+  const params = generateParams(128);
+  const keyPair = generateKeyPair(params);
 
-  const registrationMessage = {
-    params: keyPair.params,
-    publicKey: keyPair.publicKey,
-  };
+  console.log(`Device ${deviceId} key pair ready`);
 
-  client.publish(
-    `devices/${deviceId}/register`,
-    JSON.stringify(registrationMessage, bigIntReplacer),
-    { retain: true }
-  );
+  const client = mqtt.connect(brokerUrl);
 
-  console.log(`Device ${deviceId} sent registration`);
+  client.on("connect", () => {
+    console.log(`Device ${deviceId} connected to broker`);
 
-  client.subscribe(`devices/${deviceId}/nonce`);
-
-  setInterval(() => {
-    client.publish(`devices/${deviceId}/nonce-request`, JSON.stringify({}));
-  }, 8000);
-});
-
-client.on("message", (topic, payload) => {
-  const parts = topic.split("/");
-  const action = parts[2];
-
-  if (action === "nonce") {
-    const { nonce } = JSON.parse(payload.toString());
-
-    const proof = prove(keyPair);
-
-    const message = {
-      ...proof,
-      nonce,
-      temperature: readTemperature(),
-      timestamp: new Date().toISOString(),
+    const registrationMessage = {
+      params: keyPair.params,
+      publicKey: keyPair.publicKey,
     };
 
-    const authTopic = `devices/${deviceId}/auth`;
+    client.publish(
+      `devices/${deviceId}/register`,
+      JSON.stringify(registrationMessage, bigIntReplacer),
+      { retain: true }
+    );
 
-    client.publish(authTopic, JSON.stringify(message, bigIntReplacer));
-    console.log(`Device ${deviceId} sent a new proof with nonce`);
-    writeFileSync("/tmp/last-proof.json", JSON.stringify(message, bigIntReplacer));
+    console.log(`Device ${deviceId} sent registration`);
+
+    client.subscribe(`devices/${deviceId}/nonce`);
+
+    function scheduleNonceRequest() {
+      const nextDelay = 7000 + Math.random() * 2000; 
+
+      setTimeout(() => {
+        client.publish(`devices/${deviceId}/nonce-request`, JSON.stringify({}));
+        scheduleNonceRequest();
+      }, nextDelay);
+    }
+
+    const startupDelay = Math.random() * 3000; 
+    setTimeout(scheduleNonceRequest, startupDelay);
+  });
+
+  client.on("message", (topic, payload) => {
+    const parts = topic.split("/");
+    const action = parts[2];
+
+    if (action === "nonce") {
+      const { nonce } = JSON.parse(payload.toString());
+
+      const proof = prove(keyPair);
+
+      const message = {
+        ...proof,
+        nonce,
+        temperature: readTemperature(),
+        humidity: readHumidity(),
+        battery: readBattery(),
+        timestamp: new Date().toISOString(),
+      };
+
+      const authTopic = `devices/${deviceId}/auth`;
+
+      client.publish(authTopic, JSON.stringify(message, bigIntReplacer));
+      console.log(`Device ${deviceId} sent a new proof with nonce`);
+      writeFileSync(`/tmp/last-proof-${deviceId}.json`, JSON.stringify(message, bigIntReplacer));
+    }
+  });
+}
+
+console.log(`Starting ${initialDeviceIds.length} simulated device(s): ${initialDeviceIds.join(", ")}`);
+
+for (const deviceId of initialDeviceIds) {
+  runningDevices.add(deviceId);
+  startDevice(deviceId);
+}
+
+const controlApp = express();
+controlApp.use(express.json());
+
+controlApp.post("/devices", (req, res) => {
+  const { deviceId, temperature, humidity, battery } = req.body || {};
+
+  if (!deviceId || typeof deviceId !== "string") {
+    return res.status(400).json({ error: "deviceId is required" });
   }
+
+  if (runningDevices.has(deviceId)) {
+    return res.status(409).json({ error: `Device ${deviceId} is already running in this simulator` });
+  }
+
+  runningDevices.add(deviceId);
+  startDevice(deviceId, { temperature, humidity, battery });
+
+  res.status(201).json({ deviceId, started: true });
+});
+
+controlApp.get("/devices", (req, res) => {
+  res.json(Array.from(runningDevices));
+});
+
+controlApp.listen(CONTROL_PORT, () => {
+  console.log(`Device-sim control API listening on port ${CONTROL_PORT}`);
 });
