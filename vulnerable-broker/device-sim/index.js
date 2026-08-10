@@ -12,10 +12,40 @@ const initialDeviceIds = (process.env.DEVICE_IDS || process.env.DEVICE_ID || "de
 
 const runningDevices = new Set();
 
+const STATUS_OPTIONS = {
+  camera: ["idle", "recording"],
+  door: ["closed", "open"],
+};
+
+const VALID_TYPES = ["sensor", "thermostat", "camera", "door"];
+
+function buildTelemetry(type, readers) {
+  const telemetry = { battery: readers.readBattery() };
+
+  if (type === "sensor" || type === "thermostat") {
+    telemetry.temperature = readers.readTemperature();
+  }
+
+  if (type === "sensor") {
+    telemetry.humidity = readers.readHumidity();
+  }
+
+  if (type === "camera" || type === "door") {
+    telemetry.status = readers.readStatus();
+  }
+
+  return telemetry;
+}
+
 function startDevice(deviceId, options = {}) {
+  const type = VALID_TYPES.includes(options.type) ? options.type : "sensor";
+
   const tempBase = typeof options.temperature === "number" ? options.temperature : 22;
   const humidityBase = typeof options.humidity === "number" ? options.humidity : 45;
   let batteryLevel = typeof options.battery === "number" ? options.battery : 100;
+
+  const statusOptions = STATUS_OPTIONS[type];
+  let currentStatus = statusOptions ? statusOptions[0] : null;
 
   function readTemperature() {
     const variation = (Math.random() * 4 - 2).toFixed(1);
@@ -32,10 +62,17 @@ function startDevice(deviceId, options = {}) {
     return parseFloat(batteryLevel.toFixed(1));
   }
 
+  function readStatus() {
+    if (statusOptions && Math.random() < 0.15) {
+      currentStatus = currentStatus === statusOptions[0] ? statusOptions[1] : statusOptions[0];
+    }
+    return currentStatus;
+  }
+
   const client = mqtt.connect(brokerUrl);
 
   client.on("connect", () => {
-    console.log(`Device ${deviceId} connected to broker`);
+    console.log(`Device ${deviceId} (${type}) connected to broker`);
 
     function scheduleAuth() {
       const nextDelay = 7000 + Math.random() * 2000;
@@ -43,9 +80,8 @@ function startDevice(deviceId, options = {}) {
       setTimeout(() => {
         const message = {
           secret: SHARED_SECRET,
-          temperature: readTemperature(),
-          humidity: readHumidity(),
-          battery: readBattery(),
+          type,
+          ...buildTelemetry(type, { readTemperature, readHumidity, readBattery, readStatus }),
           timestamp: new Date().toISOString(),
         };
 
@@ -73,7 +109,7 @@ const controlApp = express();
 controlApp.use(express.json());
 
 controlApp.post("/devices", (req, res) => {
-  const { deviceId, temperature, humidity, battery } = req.body || {};
+  const { deviceId, type, temperature, humidity, battery } = req.body || {};
 
   if (!deviceId || typeof deviceId !== "string") {
     return res.status(400).json({ error: "deviceId is required" });
@@ -84,7 +120,7 @@ controlApp.post("/devices", (req, res) => {
   }
 
   runningDevices.add(deviceId);
-  startDevice(deviceId, { temperature, humidity, battery });
+  startDevice(deviceId, { type, temperature, humidity, battery });
 
   res.status(201).json({ deviceId, started: true });
 });

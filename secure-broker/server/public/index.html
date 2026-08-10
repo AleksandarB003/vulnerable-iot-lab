@@ -162,6 +162,68 @@
     width: 100%;
   }
 
+  #exploit-panel {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 16px;
+    margin-bottom: 22px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: flex-end;
+  }
+
+  #exploit-panel select {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text);
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 12.5px;
+    padding: 6px 8px;
+  }
+
+  #run-exploit-btn {
+    background: var(--rejected);
+    color: #0b0e14;
+    border: none;
+    border-radius: 6px;
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 12.5px;
+    font-weight: 600;
+    padding: 7px 14px;
+    cursor: pointer;
+  }
+
+  #run-exploit-btn:disabled {
+    opacity: 0.5;
+    cursor: default;
+  }
+
+  #exploit-status {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 11px;
+    color: var(--text-muted);
+    width: 100%;
+  }
+
+  #exploit-output {
+    width: 100%;
+    max-height: 220px;
+    overflow-y: auto;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 10px 12px;
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 11.5px;
+    color: var(--text);
+    white-space: pre-wrap;
+    word-break: break-word;
+    margin: 0;
+  }
+
   #devices {
     display: flex;
     flex-wrap: wrap;
@@ -375,10 +437,19 @@
     <input id="new-device-id" type="text" placeholder="e.g. front-door-lock" />
   </div>
   <div class="field">
+    <label for="new-device-type">Device Type</label>
+    <select id="new-device-type">
+      <option value="sensor">Sensor (temp + humidity)</option>
+      <option value="thermostat">Thermostat (temp only)</option>
+      <option value="camera">Camera (battery + status)</option>
+      <option value="door">Door / Lock (battery + status)</option>
+    </select>
+  </div>
+  <div class="field" id="new-device-temp-field">
     <label for="new-device-temp">Temperature °C</label>
     <input id="new-device-temp" type="number" placeholder="22" />
   </div>
-  <div class="field">
+  <div class="field" id="new-device-humidity-field">
     <label for="new-device-humidity">Humidity %</label>
     <input id="new-device-humidity" type="number" placeholder="45" />
   </div>
@@ -388,6 +459,28 @@
   </div>
   <button id="add-device-btn">Add device</button>
   <div id="add-device-status"></div>
+</div>
+
+<div id="exploit-panel">
+  <div class="field">
+    <label for="exploit-select">Attack</label>
+    <select id="exploit-select">
+      <option value="forge_proof">Forge proof</option>
+      <option value="replay_attack">Replay attack</option>
+      <option value="register_hijack">Register hijack</option>
+      <option value="nonce_spam_burst">Nonce flood DoS</option>
+      <option value="mitm_sniff">MITM sniff (both brokers)</option>
+    </select>
+  </div>
+  <div class="field">
+    <label for="exploit-device-select">Target device</label>
+    <select id="exploit-device-select">
+      <option value="">(loading...)</option>
+    </select>
+  </div>
+  <button id="run-exploit-btn">Run attack</button>
+  <div id="exploit-status"></div>
+  <pre id="exploit-output"></pre>
 </div>
 
 <div id="devices">
@@ -418,9 +511,78 @@
   const connLabel = document.getElementById("conn-label");
   const addDeviceBtn = document.getElementById("add-device-btn");
   const addDeviceStatus = document.getElementById("add-device-status");
+  const exploitSelect = document.getElementById("exploit-select");
+  const exploitDeviceSelect = document.getElementById("exploit-device-select");
+  const runExploitBtn = document.getElementById("run-exploit-btn");
+  const exploitStatus = document.getElementById("exploit-status");
+  const exploitOutput = document.getElementById("exploit-output");
+
+  function updateExploitDeviceOptions(devices) {
+    const previousValue = exploitDeviceSelect.value;
+
+    exploitDeviceSelect.innerHTML = devices
+      .map((d) => `<option value="${d.deviceId}">${d.deviceId}</option>`)
+      .join("");
+
+    if (devices.some((d) => d.deviceId === previousValue)) {
+      exploitDeviceSelect.value = previousValue;
+    }
+  }
+
+  exploitSelect.addEventListener("change", () => {
+    exploitDeviceSelect.disabled = exploitSelect.value === "mitm_sniff";
+  });
+
+  runExploitBtn.addEventListener("click", async () => {
+    const exploit = exploitSelect.value;
+    const deviceId = exploitDeviceSelect.value;
+
+    if (exploit !== "mitm_sniff" && !deviceId) {
+      exploitStatus.textContent = "Pick a target device first.";
+      return;
+    }
+
+    runExploitBtn.disabled = true;
+    exploitStatus.textContent = "Running, this can take a few seconds...";
+    exploitOutput.textContent = "";
+
+    try {
+      const res = await fetch("/run-exploit", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          exploit,
+          deviceId: exploit === "mitm_sniff" ? undefined : deviceId,
+        }),
+      });
+
+      const data = await res.json();
+
+      exploitStatus.textContent = data.timedOut ? "Stopped after timeout" : "Done";
+      exploitOutput.textContent = data.output || "(no output)";
+    } catch (err) {
+      exploitStatus.textContent = "Request failed.";
+    } finally {
+      runExploitBtn.disabled = false;
+    }
+  });
+
+  const newDeviceType = document.getElementById("new-device-type");
+  const newDeviceTempField = document.getElementById("new-device-temp-field");
+  const newDeviceHumidityField = document.getElementById("new-device-humidity-field");
+
+  function updateDeviceFieldVisibility() {
+    const type = newDeviceType.value;
+    newDeviceTempField.style.display = type === "sensor" || type === "thermostat" ? "flex" : "none";
+    newDeviceHumidityField.style.display = type === "sensor" ? "flex" : "none";
+  }
+
+  newDeviceType.addEventListener("change", updateDeviceFieldVisibility);
+  updateDeviceFieldVisibility();
 
   addDeviceBtn.addEventListener("click", async () => {
     const deviceId = document.getElementById("new-device-id").value.trim();
+    const type = newDeviceType.value;
     const temperature = document.getElementById("new-device-temp").value;
     const humidity = document.getElementById("new-device-humidity").value;
     const battery = document.getElementById("new-device-battery").value;
@@ -439,6 +601,7 @@
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           deviceId,
+          type,
           temperature: temperature ? parseFloat(temperature) : undefined,
           humidity: humidity ? parseFloat(humidity) : undefined,
           battery: battery ? parseFloat(battery) : undefined,
@@ -451,7 +614,7 @@
         addDeviceStatus.textContent = data.error || "Failed to add device.";
       } else {
         const parts = Object.entries(data.results).map(([side, result]) => `${side}: ${result}`);
-        addDeviceStatus.textContent = parts.join(" · ");
+        addDeviceStatus.textContent = parts.join(" \u00b7 ");
         document.getElementById("new-device-id").value = "";
       }
     } catch (err) {
@@ -501,6 +664,13 @@
       const pillLabel = d.authenticated ? "authenticated" : "not authenticated";
       const dotPulseClass = justAuthenticated ? "pulse" : "";
 
+      const telemetryParts = [];
+      if (d.temperature != null) telemetryParts.push(`${d.temperature}°C`);
+      if (d.humidity != null) telemetryParts.push(`${d.humidity}% humidity`);
+      if (d.battery != null) telemetryParts.push(`${d.battery}% battery`);
+      if (d.status != null) telemetryParts.push(`status: ${d.status}`);
+      const telemetryLine = telemetryParts.length ? telemetryParts.join(" · ") : "no telemetry yet";
+
       return `
         <div class="device-card">
           <div class="row-top">
@@ -511,7 +681,8 @@
           </div>
           <div class="device-meta">
             pubkey <span class="key-value">${truncateKey(d.publicKey)}</span><br/>
-            last auth ${relativeTime(d.lastAuthAt)}
+            last auth ${relativeTime(d.lastAuthAt)}<br/>
+            ${telemetryLine}
           </div>
         </div>
       `;
@@ -548,6 +719,7 @@
       if (!res.ok) throw new Error("bad response");
       const devices = await res.json();
       renderDevices(devices);
+      updateExploitDeviceOptions(devices);
       connDot.className = "conn-dot live";
       connLabel.textContent = "live";
     } catch (err) {

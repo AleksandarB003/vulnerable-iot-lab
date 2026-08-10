@@ -50,6 +50,8 @@ services:
       - secure-mosquitto
     environment:
       - MQTT_BROKER_URL=mqtt://secure-mosquitto:1883
+    volumes:
+      - ./exploits:/app/exploits:ro
 
   secure-device-sim:
     build: ./secure-broker/device-sim

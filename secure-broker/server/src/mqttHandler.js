@@ -99,7 +99,12 @@ export function startMqttListener(brokerUrl) {
       const isValid = verify(proof);
 
       if (isValid) {
-        markAuthenticated(deviceId);
+        markAuthenticated(deviceId, {
+          temperature: message.temperature,
+          humidity: message.humidity,
+          battery: message.battery,
+          status: message.status,
+        });
         console.log(`Device ${deviceId} authenticated with a valid proof`);
         logEvent("auth_success", deviceId, `Authenticated with a valid proof`);
       } else {

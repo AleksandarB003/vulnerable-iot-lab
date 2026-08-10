@@ -25,7 +25,12 @@ client.on("message", (topic, payload) => {
   }
 
   if (message.secret === SHARED_SECRET) {
-    markAuthenticated(deviceId);
+    markAuthenticated(deviceId, {
+      temperature: message.temperature,
+      humidity: message.humidity,
+      battery: message.battery,
+      status: message.status,
+    });
     console.log(`Device ${deviceId} authenticated`);
   } else {
     console.log(`Device ${deviceId} sent invalid secret`);

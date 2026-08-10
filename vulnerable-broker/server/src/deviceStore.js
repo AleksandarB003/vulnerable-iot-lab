@@ -1,10 +1,16 @@
 const devices = new Map();
 
-export function markAuthenticated(deviceId) {
+export function markAuthenticated(deviceId, telemetry = {}) {
+  const existing = devices.get(deviceId) || {};
+
   devices.set(deviceId, {
     deviceId,
     authenticated: true,
     lastAuthAt: new Date().toISOString(),
+    temperature: typeof telemetry.temperature === "number" ? telemetry.temperature : existing.temperature ?? null,
+    humidity: typeof telemetry.humidity === "number" ? telemetry.humidity : existing.humidity ?? null,
+    battery: typeof telemetry.battery === "number" ? telemetry.battery : existing.battery ?? null,
+    status: typeof telemetry.status === "string" ? telemetry.status : existing.status ?? null,
   });
 }
 
