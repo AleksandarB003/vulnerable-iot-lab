@@ -1,12 +1,15 @@
 import express from "express";
 import { startMqttListener } from "./mqttHandler.js";
 import { getAllDevices, getDevice } from "./deviceStore.js";
+import { getEventsAfter } from "./eventLog.js";
 
 const app = express();
 const PORT = 3000;
 const brokerUrl = process.env.MQTT_BROKER_URL || "mqtt://localhost:1883";
 
 startMqttListener(brokerUrl);
+
+app.use(express.static("public"));
 
 function serializeDevice(device) {
   return JSON.parse(JSON.stringify(device, (key, value) =>
@@ -26,6 +29,11 @@ app.get("/devices/:id", (req, res) => {
   }
 
   res.json(serializeDevice(device));
+});
+
+app.get("/events", (req, res) => {
+  const afterId = parseInt(req.query.afterId, 10) || 0;
+  res.json(getEventsAfter(afterId));
 });
 
 app.listen(PORT, () => {

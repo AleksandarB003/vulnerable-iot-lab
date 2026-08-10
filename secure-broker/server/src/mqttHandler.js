@@ -3,6 +3,7 @@ import { verify } from "schnorr-zkp-toolkit";
 import { registerDevice, markAuthenticated, getDevice } from "./deviceStore.js";
 import { parsePublicParams, parseProof } from "./serialize.js";
 import { issueNonce, consumeNonce } from "./nonceStore.js";
+import { logEvent } from "./eventLog.js";
 
 export function startMqttListener(brokerUrl) {
   const client = mqtt.connect(brokerUrl);
@@ -25,6 +26,7 @@ export function startMqttListener(brokerUrl) {
       message = JSON.parse(payload.toString());
     } catch (error) {
       console.log(`Received malformed message on topic ${topic}, ignoring`);
+      logEvent("malformed_message", deviceId, `Malformed message on topic ${topic}, ignoring`);
       return;
     }
 
@@ -33,6 +35,7 @@ export function startMqttListener(brokerUrl) {
 
       if (existing) {
         console.log(`Device ${deviceId} attempted to re-register, ignoring (already registered)`);
+        logEvent("register_blocked", deviceId, `Re-registration attempt blocked (already registered)`);
         return;
       }
 
@@ -41,6 +44,7 @@ export function startMqttListener(brokerUrl) {
 
       registerDevice(deviceId, params, publicKey);
       console.log(`Device ${deviceId} registered with public key`);
+      logEvent("register", deviceId, `Registered with public key`);
       return;
     }
 
@@ -49,11 +53,13 @@ export function startMqttListener(brokerUrl) {
 
       if (!nonce) {
         console.log(`Device ${deviceId} requested a nonce too soon, rate limiting`);
+        logEvent("nonce_rate_limited", deviceId, `Nonce request rate limited`);
         return;
       }
 
       client.publish(`devices/${deviceId}/nonce`, JSON.stringify({ nonce }));
       console.log(`Issued nonce to device ${deviceId}`);
+      logEvent("nonce_issued", deviceId, `Nonce issued`);
       return;
     }
 
@@ -62,6 +68,7 @@ export function startMqttListener(brokerUrl) {
 
       if (!device) {
         console.log(`Device ${deviceId} tried to authenticate but is not registered`);
+        logEvent("auth_rejected", deviceId, `Auth attempt rejected: not registered`);
         return;
       }
 
@@ -69,6 +76,7 @@ export function startMqttListener(brokerUrl) {
 
       if (!providedNonce || !consumeNonce(deviceId, providedNonce)) {
         console.log(`Device ${deviceId} sent an invalid or reused nonce, rejecting`);
+        logEvent("auth_rejected", deviceId, `Auth attempt rejected: invalid or reused nonce`);
         return;
       }
 
@@ -78,11 +86,13 @@ export function startMqttListener(brokerUrl) {
         proof = parseProof(message);
       } catch (error) {
         console.log(`Device ${deviceId} sent a malformed proof, ignoring`);
+        logEvent("auth_rejected", deviceId, `Auth attempt rejected: malformed proof`);
         return;
       }
 
       if (proof.publicKey !== device.publicKey) {
         console.log(`Device ${deviceId} sent a proof with a mismatched public key, rejecting`);
+        logEvent("auth_rejected", deviceId, `Auth attempt rejected: public key mismatch`);
         return;
       }
 
@@ -91,8 +101,10 @@ export function startMqttListener(brokerUrl) {
       if (isValid) {
         markAuthenticated(deviceId);
         console.log(`Device ${deviceId} authenticated with a valid proof`);
+        logEvent("auth_success", deviceId, `Authenticated with a valid proof`);
       } else {
         console.log(`Device ${deviceId} sent an invalid proof`);
+        logEvent("auth_rejected", deviceId, `Auth attempt rejected: invalid proof`);
       }
     }
   });
