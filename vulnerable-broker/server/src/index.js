@@ -1,12 +1,16 @@
 import express from "express";
-import { startMqttListener } from "./mqttHandler.js";
-import { getAllDevices, getDevice } from "./deviceStore.js";
+import { startMqttListener, SHARED_SECRET } from "./mqttHandler.js";
+import { getAllDevices, getDevice, getRawMessage } from "./deviceStore.js";
+import { getEventsAfter, logEvent } from "./eventLog.js";
 
 const app = express();
 const PORT = 3000;
 const brokerUrl = process.env.MQTT_BROKER_URL || "mqtt://localhost:1883";
 
-startMqttListener(brokerUrl);
+const mqttClient = startMqttListener(brokerUrl);
+
+app.use(express.static("public"));
+app.use(express.json());
 
 app.get("/devices", (req, res) => {
   res.json(getAllDevices());
@@ -20,6 +24,72 @@ app.get("/devices/:id", (req, res) => {
   }
 
   res.json(device);
+});
+
+app.get("/events", (req, res) => {
+  const afterId = parseInt(req.query.afterId, 10) || 0;
+  res.json(getEventsAfter(afterId));
+});
+
+app.post("/impersonate", (req, res) => {
+  const { deviceId, temperature, humidity, battery, status } = req.body || {};
+
+  if (!deviceId || typeof deviceId !== "string") {
+    return res.status(400).json({ error: "deviceId is required" });
+  }
+
+  const message = { secret: SHARED_SECRET, timestamp: new Date().toISOString() };
+
+  if (typeof temperature === "number") message.temperature = temperature;
+  if (typeof humidity === "number") message.humidity = humidity;
+  if (typeof battery === "number") message.battery = battery;
+  if (typeof status === "string") message.status = status;
+
+  mqttClient.publish(`devices/${deviceId}/auth`, JSON.stringify(message));
+
+  res.json({ deviceId, published: true });
+});
+
+app.post("/replay", (req, res) => {
+  const { deviceId } = req.body || {};
+
+  if (!deviceId || typeof deviceId !== "string") {
+    return res.status(400).json({ error: "deviceId is required" });
+  }
+
+  const raw = getRawMessage(deviceId);
+
+  if (!raw) {
+    return res.status(404).json({ error: `No captured message for ${deviceId} yet` });
+  }
+
+  mqttClient.publish(`devices/${deviceId}/auth`, raw);
+
+  res.json({ deviceId, replayed: true });
+});
+
+app.post("/flood", (req, res) => {
+  const { deviceId, count } = req.body || {};
+
+  if (!deviceId || typeof deviceId !== "string") {
+    return res.status(400).json({ error: "deviceId is required" });
+  }
+
+  const total = Math.min(Math.max(parseInt(count, 10) || 50, 1), 200);
+
+  logEvent("flood", deviceId, `Sending ${total} auth messages back to back — no rate limiting to stop this`);
+
+  for (let i = 0; i < total; i++) {
+    const message = {
+      secret: SHARED_SECRET,
+      battery: 100,
+      timestamp: new Date().toISOString(),
+    };
+
+    mqttClient.publish(`devices/${deviceId}/auth`, JSON.stringify(message));
+  }
+
+  res.json({ deviceId, sent: total });
 });
 
 app.listen(PORT, () => {

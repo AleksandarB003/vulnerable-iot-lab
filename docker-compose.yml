@@ -29,6 +29,7 @@ services:
       - vulnerable-mosquitto
     environment:
       - MQTT_BROKER_URL=mqtt://vulnerable-mosquitto:1883
+      - DEVICE_IDS=${DEVICE_IDS:-sensor-livingroom,sensor-garage,thermostat-bedroom}
 
   secure-mosquitto:
     image: eclipse-mosquitto:2
@@ -49,6 +50,8 @@ services:
       - secure-mosquitto
     environment:
       - MQTT_BROKER_URL=mqtt://secure-mosquitto:1883
+    volumes:
+      - ./exploits:/app/exploits:ro
 
   secure-device-sim:
     build: ./secure-broker/device-sim
@@ -58,3 +61,4 @@ services:
       - secure-mosquitto
     environment:
       - MQTT_BROKER_URL=mqtt://secure-mosquitto:1883
+      - DEVICE_IDS=${DEVICE_IDS:-sensor-livingroom,sensor-garage,thermostat-bedroom}
