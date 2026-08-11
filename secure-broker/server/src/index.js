@@ -67,7 +67,7 @@ const DEVICE_SIM_CONTROL_URLS = {
 };
 
 app.post("/simulated-devices", async (req, res) => {
-  const { deviceId, type, temperature, humidity, battery } = req.body || {};
+  const { deviceId, type, temperature, humidity, battery, status } = req.body || {};
 
   if (!deviceId) {
     return res.status(400).json({ error: "deviceId is required" });
@@ -80,7 +80,7 @@ app.post("/simulated-devices", async (req, res) => {
       const response = await fetch(url, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ deviceId, type, temperature, humidity, battery }),
+        body: JSON.stringify({ deviceId, type, temperature, humidity, battery, status }),
       });
 
       if (response.ok) {

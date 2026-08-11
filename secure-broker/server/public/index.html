@@ -453,6 +453,10 @@
     <label for="new-device-humidity">Humidity %</label>
     <input id="new-device-humidity" type="number" placeholder="45" />
   </div>
+  <div class="field" id="new-device-status-field">
+    <label for="new-device-status">Initial Status</label>
+    <select id="new-device-status"></select>
+  </div>
   <div class="field">
     <label for="new-device-battery">Battery %</label>
     <input id="new-device-battery" type="number" placeholder="100" />
@@ -570,11 +574,26 @@
   const newDeviceType = document.getElementById("new-device-type");
   const newDeviceTempField = document.getElementById("new-device-temp-field");
   const newDeviceHumidityField = document.getElementById("new-device-humidity-field");
+  const newDeviceStatusField = document.getElementById("new-device-status-field");
+  const newDeviceStatus = document.getElementById("new-device-status");
+
+  const STATUS_OPTIONS_BY_TYPE = {
+    camera: ["idle", "recording"],
+    door: ["closed", "open"],
+  };
 
   function updateDeviceFieldVisibility() {
     const type = newDeviceType.value;
     newDeviceTempField.style.display = type === "sensor" || type === "thermostat" ? "flex" : "none";
     newDeviceHumidityField.style.display = type === "sensor" ? "flex" : "none";
+
+    const statusOptions = STATUS_OPTIONS_BY_TYPE[type];
+    if (statusOptions) {
+      newDeviceStatusField.style.display = "flex";
+      newDeviceStatus.innerHTML = statusOptions.map((s) => `<option value="${s}">${s}</option>`).join("");
+    } else {
+      newDeviceStatusField.style.display = "none";
+    }
   }
 
   newDeviceType.addEventListener("change", updateDeviceFieldVisibility);
@@ -586,6 +605,7 @@
     const temperature = document.getElementById("new-device-temp").value;
     const humidity = document.getElementById("new-device-humidity").value;
     const battery = document.getElementById("new-device-battery").value;
+    const status = newDeviceStatusField.style.display !== "none" ? newDeviceStatus.value : undefined;
 
     if (!deviceId) {
       addDeviceStatus.textContent = "Device ID is required.";
@@ -605,6 +625,7 @@
           temperature: temperature ? parseFloat(temperature) : undefined,
           humidity: humidity ? parseFloat(humidity) : undefined,
           battery: battery ? parseFloat(battery) : undefined,
+          status,
         }),
       });
 

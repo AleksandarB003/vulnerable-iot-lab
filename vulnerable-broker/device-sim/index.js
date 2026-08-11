@@ -45,7 +45,9 @@ function startDevice(deviceId, options = {}) {
   let batteryLevel = typeof options.battery === "number" ? options.battery : 100;
 
   const statusOptions = STATUS_OPTIONS[type];
-  let currentStatus = statusOptions ? statusOptions[0] : null;
+  let currentStatus = statusOptions
+    ? (statusOptions.includes(options.status) ? options.status : statusOptions[0])
+    : null;
 
   function readTemperature() {
     const variation = (Math.random() * 4 - 2).toFixed(1);
@@ -109,7 +111,7 @@ const controlApp = express();
 controlApp.use(express.json());
 
 controlApp.post("/devices", (req, res) => {
-  const { deviceId, type, temperature, humidity, battery } = req.body || {};
+  const { deviceId, type, temperature, humidity, battery, status } = req.body || {};
 
   if (!deviceId || typeof deviceId !== "string") {
     return res.status(400).json({ error: "deviceId is required" });
@@ -120,7 +122,7 @@ controlApp.post("/devices", (req, res) => {
   }
 
   runningDevices.add(deviceId);
-  startDevice(deviceId, { type, temperature, humidity, battery });
+  startDevice(deviceId, { type, temperature, humidity, battery, status });
 
   res.status(201).json({ deviceId, started: true });
 });
