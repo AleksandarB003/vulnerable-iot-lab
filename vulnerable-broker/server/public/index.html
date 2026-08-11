@@ -1,0 +1,677 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Vulnerable Broker — Live Monitor</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
+<style>
+  :root {
+    --bg: #0b0e14;
+    --panel: #131822;
+    --panel-raised: #161c28;
+    --border: #232b3a;
+    --text: #e4e8f1;
+    --text-muted: #6b7385;
+    --accent: #f87171;
+    --success: #4ade80;
+    --rejected: #f87171;
+    --neutral: #7c86a1;
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body {
+    margin: 0;
+    height: 100%;
+    background: var(--bg);
+    color: var(--text);
+    font-family: "IBM Plex Sans", -apple-system, sans-serif;
+  }
+
+  body {
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+    padding: 28px 32px 20px;
+  }
+
+  header {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    margin-bottom: 22px;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+
+  .title-block {
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+  }
+
+  h1 {
+    font-size: 15px;
+    font-weight: 600;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    margin: 0;
+    color: var(--text);
+  }
+
+  .subtitle {
+    font-size: 12px;
+    color: var(--text-muted);
+    font-family: "IBM Plex Mono", monospace;
+  }
+
+  .conn-status {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 12px;
+    color: var(--text-muted);
+  }
+
+  .conn-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--text-muted);
+    transition: background 0.3s ease;
+  }
+
+  .conn-dot.live {
+    background: var(--success);
+    box-shadow: 0 0 8px rgba(74, 222, 128, 0.6);
+  }
+
+  .conn-dot.down {
+    background: var(--rejected);
+    box-shadow: 0 0 8px rgba(248, 113, 113, 0.6);
+  }
+
+ #attacker-panel {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 16px;
+    margin-bottom: 22px;
+  }
+
+  .attacker-section {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: flex-end;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .attacker-section:last-of-type {
+    border-bottom: none;
+  }
+
+  .attacker-section-title {
+    width: 100%;
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 11px;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    margin-bottom: 2px;
+  }
+
+  .field {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .field label {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 10.5px;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+  }
+
+  .field input, .field select {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text);
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 12.5px;
+    padding: 6px 8px;
+    width: 130px;
+  }
+
+  .field input:focus, .field select:focus {
+    outline: none;
+    border-color: var(--accent);
+  }
+
+  .attacker-btn {
+    background: var(--accent);
+    color: #0b0e14;
+    border: none;
+    border-radius: 6px;
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 12.5px;
+    font-weight: 600;
+    padding: 7px 14px;
+    cursor: pointer;
+  }
+
+  .attacker-btn:disabled {
+    opacity: 0.5;
+    cursor: default;
+  }
+
+  .attacker-status {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 11px;
+    color: var(--text-muted);
+    width: 100%;
+  }
+
+  #devices {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin-bottom: 22px;
+  }
+
+  .device-card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 16px;
+    min-width: 220px;
+    flex: 1 1 220px;
+    max-width: 300px;
+  }
+
+  .device-card .row-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 10px;
+  }
+
+  .device-id {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text);
+  }
+
+  .status-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 10.5px;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    padding: 3px 8px;
+    border-radius: 20px;
+    border: 1px solid transparent;
+  }
+
+  .status-pill.auth {
+    color: var(--success);
+    border-color: rgba(74, 222, 128, 0.35);
+    background: rgba(74, 222, 128, 0.08);
+  }
+
+  .status-pill.unauth {
+    color: var(--text-muted);
+    border-color: var(--border);
+    background: transparent;
+  }
+
+  .status-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: currentColor;
+  }
+
+  .status-dot.pulse {
+    animation: pulse-ring 0.9s ease-out;
+  }
+
+  @keyframes pulse-ring {
+    0% { box-shadow: 0 0 0 0 rgba(74, 222, 128, 0.7); }
+    100% { box-shadow: 0 0 0 10px rgba(74, 222, 128, 0); }
+  }
+
+  .device-meta {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 11px;
+    color: var(--text-muted);
+    line-height: 1.7;
+  }
+
+  .empty-state {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 12px;
+    color: var(--text-muted);
+    padding: 10px 2px;
+  }
+
+  #log-panel {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    overflow: hidden;
+    min-height: 260px;
+  }
+
+  .log-header {
+    padding: 10px 16px;
+    border-bottom: 1px solid var(--border);
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 11px;
+    color: var(--text-muted);
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .legend {
+    display: flex;
+    gap: 14px;
+    text-transform: none;
+    letter-spacing: 0;
+  }
+
+  .legend span {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+  }
+
+  .legend .dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+  }
+
+  #log {
+    flex: 1;
+    overflow-y: auto;
+    padding: 8px 0;
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 12.5px;
+    line-height: 1.9;
+  }
+
+  .log-line {
+    display: flex;
+    gap: 10px;
+    padding: 1px 16px;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+
+  .log-line:hover {
+    background: var(--panel-raised);
+  }
+
+  .log-time {
+    color: var(--text-muted);
+    flex-shrink: 0;
+  }
+
+  .log-device {
+    flex-shrink: 0;
+    min-width: 72px;
+  }
+
+  .log-msg {
+    flex: 1;
+  }
+
+  .t-auth_success { color: var(--success); }
+  .t-auth_rejected { color: var(--rejected); }
+  .t-flood { color: var(--accent); }
+
+  #log::-webkit-scrollbar { width: 8px; }
+  #log::-webkit-scrollbar-track { background: transparent; }
+  #log::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="title-block">
+    <h1>Vulnerable Broker</h1>
+    <span class="subtitle">live monitor</span>
+  </div>
+  <div class="conn-status">
+    <span class="conn-dot" id="conn-dot"></span>
+    <span id="conn-label">connecting…</span>
+  </div>
+</header>
+
+</header>
+
+<div id="attacker-panel">
+  <div class="attacker-section">
+    <div class="attacker-section-title">Impersonate any device (no registration needed)</div>
+    <div class="field">
+      <label for="imp-device-id">Device ID</label>
+      <input id="imp-device-id" type="text" placeholder="any name works" />
+    </div>
+    <div class="field">
+      <label for="imp-temp">Temperature °C</label>
+      <input id="imp-temp" type="number" placeholder="optional" />
+    </div>
+    <div class="field">
+      <label for="imp-humidity">Humidity %</label>
+      <input id="imp-humidity" type="number" placeholder="optional" />
+    </div>
+    <div class="field">
+      <label for="imp-battery">Battery %</label>
+      <input id="imp-battery" type="number" placeholder="optional" />
+    </div>
+    <button class="attacker-btn" id="impersonate-btn">Impersonate</button>
+  </div>
+
+  <div class="attacker-section">
+    <div class="attacker-section-title">Replay a captured message (no freshness check)</div>
+    <div class="field">
+      <label for="replay-device-select">Target device</label>
+      <select id="replay-device-select">
+        <option value="">(loading...)</option>
+      </select>
+    </div>
+    <button class="attacker-btn" id="replay-btn">Replay last message</button>
+  </div>
+
+  <div class="attacker-section">
+    <div class="attacker-section-title">Flood with auth messages (no rate limiting)</div>
+    <div class="field">
+      <label for="flood-device-select">Target device</label>
+      <select id="flood-device-select">
+        <option value="">(loading...)</option>
+      </select>
+    </div>
+    <div class="field">
+      <label for="flood-count">Count</label>
+      <input id="flood-count" type="number" placeholder="50" value="50" />
+    </div>
+    <button class="attacker-btn" id="flood-btn">Flood</button>
+  </div>
+
+  <div class="attacker-status" id="attacker-status"></div>
+</div>
+
+<div id="devices">
+  <div class="empty-state">No devices seen yet.</div>
+</div>
+
+<div id="log-panel">
+  <div class="log-header">
+    <span>Event log</span>
+    <span class="legend">
+      <span><span class="dot" style="background: var(--success)"></span>authenticated</span>
+      <span><span class="dot" style="background: var(--rejected)"></span>rejected</span>
+    </span>
+  </div>
+  <div id="log"></div>
+</div>
+
+<script>
+  let lastEventId = 0;
+  let autoScroll = true;
+  let knownAuthState = {};
+
+  const logEl = document.getElementById("log");
+  const devicesEl = document.getElementById("devices");
+  const connDot = document.getElementById("conn-dot");
+  const connLabel = document.getElementById("conn-label");
+  const impersonateBtn = document.getElementById("impersonate-btn");
+  const replayBtn = document.getElementById("replay-btn");
+  const floodBtn = document.getElementById("flood-btn");
+  const attackerStatus = document.getElementById("attacker-status");
+  const replayDeviceSelect = document.getElementById("replay-device-select");
+  const floodDeviceSelect = document.getElementById("flood-device-select");
+
+  function updateAttackerDeviceOptions(devices) {
+    const options = devices.map((d) => `<option value="${d.deviceId}">${d.deviceId}</option>`).join("");
+
+    for (const select of [replayDeviceSelect, floodDeviceSelect]) {
+      const previousValue = select.value;
+      select.innerHTML = options || '<option value="">(no devices yet)</option>';
+
+      if (devices.some((d) => d.deviceId === previousValue)) {
+        select.value = previousValue;
+      }
+    }
+  }
+
+  impersonateBtn.addEventListener("click", async () => {
+    const deviceId = document.getElementById("imp-device-id").value.trim();
+    const temperature = document.getElementById("imp-temp").value;
+    const humidity = document.getElementById("imp-humidity").value;
+    const battery = document.getElementById("imp-battery").value;
+
+    if (!deviceId) {
+      attackerStatus.textContent = "Device ID is required.";
+      return;
+    }
+
+    impersonateBtn.disabled = true;
+    attackerStatus.textContent = "Publishing forged auth message...";
+
+    try {
+      const res = await fetch("/impersonate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          deviceId,
+          temperature: temperature ? parseFloat(temperature) : undefined,
+          humidity: humidity ? parseFloat(humidity) : undefined,
+          battery: battery ? parseFloat(battery) : undefined,
+        }),
+      });
+
+      const data = await res.json();
+      attackerStatus.textContent = res.ok
+        ? `Impersonated ${deviceId} — check the event log.`
+        : data.error || "Failed.";
+    } catch (err) {
+      attackerStatus.textContent = "Request failed.";
+    } finally {
+      impersonateBtn.disabled = false;
+    }
+  });
+
+  replayBtn.addEventListener("click", async () => {
+    const deviceId = replayDeviceSelect.value;
+
+    if (!deviceId) {
+      attackerStatus.textContent = "Pick a target device first.";
+      return;
+    }
+
+    replayBtn.disabled = true;
+    attackerStatus.textContent = "Replaying captured message...";
+
+    try {
+      const res = await fetch("/replay", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ deviceId }),
+      });
+
+      const data = await res.json();
+      attackerStatus.textContent = res.ok
+        ? `Replayed the last captured message for ${deviceId} — check the event log.`
+        : data.error || "Failed.";
+    } catch (err) {
+      attackerStatus.textContent = "Request failed.";
+    } finally {
+      replayBtn.disabled = false;
+    }
+  });
+
+  floodBtn.addEventListener("click", async () => {
+    const deviceId = floodDeviceSelect.value;
+    const count = document.getElementById("flood-count").value;
+
+    if (!deviceId) {
+      attackerStatus.textContent = "Pick a target device first.";
+      return;
+    }
+
+    floodBtn.disabled = true;
+    attackerStatus.textContent = "Flooding...";
+
+    try {
+      const res = await fetch("/flood", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ deviceId, count: count ? parseInt(count, 10) : undefined }),
+      });
+
+      const data = await res.json();
+      attackerStatus.textContent = res.ok
+        ? `Sent ${data.sent} messages to ${deviceId} — watch the event log flood in.`
+        : data.error || "Failed.";
+    } catch (err) {
+      attackerStatus.textContent = "Request failed.";
+    } finally {
+      floodBtn.disabled = false;
+    }
+  });
+
+  logEl.addEventListener("scroll", () => {
+    const distanceFromBottom = logEl.scrollHeight - logEl.scrollTop - logEl.clientHeight;
+    autoScroll = distanceFromBottom < 40;
+  });
+
+  function formatTime(iso) {
+    const d = new Date(iso);
+    return d.toTimeString().slice(0, 8);
+  }
+
+  function relativeTime(iso) {
+    if (!iso) return "never";
+    const seconds = Math.floor((Date.now() - new Date(iso).getTime()) / 1000);
+    if (seconds < 2) return "just now";
+    if (seconds < 60) return `${seconds}s ago`;
+    const minutes = Math.floor(seconds / 60);
+    if (minutes < 60) return `${minutes}m ago`;
+    return `${Math.floor(minutes / 60)}h ago`;
+  }
+
+  function renderDevices(devices) {
+    if (devices.length === 0) {
+      devicesEl.innerHTML = '<div class="empty-state">No devices seen yet.</div>';
+      return;
+    }
+
+    devicesEl.innerHTML = devices.map((d) => {
+      const justAuthenticated = knownAuthState[d.deviceId] === false && d.authenticated === true;
+      knownAuthState[d.deviceId] = d.authenticated;
+
+      const pillClass = d.authenticated ? "auth" : "unauth";
+      const pillLabel = d.authenticated ? "authenticated" : "not authenticated";
+      const dotPulseClass = justAuthenticated ? "pulse" : "";
+
+      const telemetryParts = [];
+      if (d.temperature != null) telemetryParts.push(`${d.temperature}°C`);
+      if (d.humidity != null) telemetryParts.push(`${d.humidity}% humidity`);
+      if (d.battery != null) telemetryParts.push(`${d.battery}% battery`);
+      if (d.status != null) telemetryParts.push(`status: ${d.status}`);
+      const telemetryLine = telemetryParts.length ? telemetryParts.join(" · ") : "no telemetry yet";
+
+      return `
+        <div class="device-card">
+          <div class="row-top">
+            <span class="device-id">${d.deviceId}</span>
+            <span class="status-pill ${pillClass}">
+              <span class="status-dot ${dotPulseClass}"></span>${pillLabel}
+            </span>
+          </div>
+          <div class="device-meta">
+            last auth ${relativeTime(d.lastAuthAt)}<br/>
+            ${telemetryLine}
+          </div>
+        </div>
+      `;
+    }).join("");
+  }
+
+  function appendEvents(events) {
+    if (events.length === 0) return;
+
+    for (const ev of events) {
+      const line = document.createElement("div");
+      line.className = "log-line t-" + ev.type;
+      line.innerHTML = `
+        <span class="log-time">${formatTime(ev.timestamp)}</span>
+        <span class="log-device">${ev.deviceId || "—"}</span>
+        <span class="log-msg">${ev.message}</span>
+      `;
+      logEl.appendChild(line);
+      lastEventId = Math.max(lastEventId, ev.id);
+    }
+
+    while (logEl.children.length > 300) {
+      logEl.removeChild(logEl.firstChild);
+    }
+
+    if (autoScroll) {
+      logEl.scrollTop = logEl.scrollHeight;
+    }
+  }
+
+  async function pollDevices() {
+    try {
+      const res = await fetch("/devices");
+      if (!res.ok) throw new Error("bad response");
+      const devices = await res.json();
+      renderDevices(devices);
+      updateAttackerDeviceOptions(devices);
+      connDot.className = "conn-dot live";
+      connLabel.textContent = "live";
+    } catch (err) {
+      connDot.className = "conn-dot down";
+      connLabel.textContent = "disconnected";
+    }
+  }
+
+  async function pollEvents() {
+    try {
+      const res = await fetch(`/events?afterId=${lastEventId}`);
+      if (!res.ok) throw new Error("bad response");
+      const events = await res.json();
+      appendEvents(events);
+    } catch (err) {
+
+    }
+  }
+
+  pollDevices();
+  pollEvents();
+  setInterval(pollDevices, 2000);
+  setInterval(pollEvents, 1000);
+</script>
+
+</body>
+</html>

@@ -11,7 +11,21 @@ export function markAuthenticated(deviceId, telemetry = {}) {
     humidity: typeof telemetry.humidity === "number" ? telemetry.humidity : existing.humidity ?? null,
     battery: typeof telemetry.battery === "number" ? telemetry.battery : existing.battery ?? null,
     status: typeof telemetry.status === "string" ? telemetry.status : existing.status ?? null,
+    lastRawMessage: existing.lastRawMessage || null,
   });
+}
+
+export function recordRawMessage(deviceId, raw) {
+  const device = devices.get(deviceId);
+
+  if (device) {
+    device.lastRawMessage = raw;
+  }
+}
+
+export function getRawMessage(deviceId) {
+  const device = devices.get(deviceId);
+  return device ? device.lastRawMessage || null : null;
 }
 
 export function getDevice(deviceId) {
