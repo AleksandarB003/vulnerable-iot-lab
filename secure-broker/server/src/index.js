@@ -4,6 +4,7 @@ import path from "node:path";
 import { startMqttListener } from "./mqttHandler.js";
 import { getAllDevices, getDevice } from "./deviceStore.js";
 import { getEventsAfter } from "./eventLog.js";
+import { isBlocked, getBlockedUntil } from "./anomalyGuard.js";
 
 const app = express();
 const PORT = 3000;
@@ -98,9 +99,14 @@ app.post("/simulated-devices", async (req, res) => {
 });
 
 function serializeDevice(device) {
-  return JSON.parse(JSON.stringify(device, (key, value) =>
+  const plain = JSON.parse(JSON.stringify(device, (key, value) =>
     typeof value === "bigint" ? value.toString() : value
   ));
+
+  plain.blocked = isBlocked(device.deviceId);
+  plain.blockedUntil = getBlockedUntil(device.deviceId);
+
+  return plain;
 }
 
 app.get("/devices", (req, res) => {

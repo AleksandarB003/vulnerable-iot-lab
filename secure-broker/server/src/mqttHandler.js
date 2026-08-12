@@ -4,6 +4,7 @@ import { registerDevice, markAuthenticated, getDevice } from "./deviceStore.js";
 import { parsePublicParams, parseProof } from "./serialize.js";
 import { issueNonce, consumeNonce } from "./nonceStore.js";
 import { logEvent } from "./eventLog.js";
+import { isBlocked, recordFailure, recordSuccess } from "./anomalyGuard.js";
 
 export function startMqttListener(brokerUrl) {
   const client = mqtt.connect(brokerUrl);
@@ -72,6 +73,12 @@ export function startMqttListener(brokerUrl) {
         return;
       }
 
+      if (isBlocked(deviceId)) {
+        console.log(`Device ${deviceId} is temporarily blocked, rejecting`);
+        logEvent("auth_rejected", deviceId, `Auth attempt rejected: device temporarily blocked`);
+        return;
+      }
+
       const providedNonce = message.nonce;
 
       if (!providedNonce || !consumeNonce(deviceId, providedNonce)) {
@@ -87,12 +94,18 @@ export function startMqttListener(brokerUrl) {
       } catch (error) {
         console.log(`Device ${deviceId} sent a malformed proof, ignoring`);
         logEvent("auth_rejected", deviceId, `Auth attempt rejected: malformed proof`);
+        if (recordFailure(deviceId)) {
+          logEvent("device_blocked", deviceId, `Blocked for 30s after 5 consecutive invalid auth attempts`);
+        }
         return;
       }
 
       if (proof.publicKey !== device.publicKey) {
         console.log(`Device ${deviceId} sent a proof with a mismatched public key, rejecting`);
         logEvent("auth_rejected", deviceId, `Auth attempt rejected: public key mismatch`);
+        if (recordFailure(deviceId)) {
+          logEvent("device_blocked", deviceId, `Blocked for 30s after 5 consecutive invalid auth attempts`);
+        }
         return;
       }
 
@@ -105,11 +118,15 @@ export function startMqttListener(brokerUrl) {
           battery: message.battery,
           status: message.status,
         });
+        recordSuccess(deviceId);
         console.log(`Device ${deviceId} authenticated with a valid proof`);
         logEvent("auth_success", deviceId, `Authenticated with a valid proof`);
       } else {
         console.log(`Device ${deviceId} sent an invalid proof`);
         logEvent("auth_rejected", deviceId, `Auth attempt rejected: invalid proof`);
+        if (recordFailure(deviceId)) {
+          logEvent("device_blocked", deviceId, `Blocked for 30s after 5 consecutive invalid auth attempts`);
+        }
       }
     }
   });

@@ -280,6 +280,12 @@
     background: transparent;
   }
 
+  .status-pill.blocked {
+    color: var(--rejected);
+    border-color: rgba(248, 113, 113, 0.35);
+    background: rgba(248, 113, 113, 0.08);
+  }
+
   .status-dot {
     width: 6px;
     height: 6px;
@@ -396,6 +402,7 @@
   .t-register, .t-auth_success { color: var(--success); }
   .t-register_blocked, .t-nonce_rate_limited { color: var(--blocked); }
   .t-auth_rejected { color: var(--rejected); }
+  .t-device_blocked { color: var(--rejected); font-weight: 600; }
   .t-nonce_issued { color: var(--neutral); }
   .t-malformed_message { color: var(--text-muted); }
 
@@ -681,8 +688,8 @@
       const justAuthenticated = knownAuthState[d.deviceId] === false && d.authenticated === true;
       knownAuthState[d.deviceId] = d.authenticated;
 
-      const pillClass = d.authenticated ? "auth" : "unauth";
-      const pillLabel = d.authenticated ? "authenticated" : "not authenticated";
+      const pillClass = d.blocked ? "blocked" : d.authenticated ? "auth" : "unauth";
+      const pillLabel = d.blocked ? "blocked" : d.authenticated ? "authenticated" : "not authenticated";
       const dotPulseClass = justAuthenticated ? "pulse" : "";
 
       const telemetryParts = [];
@@ -691,6 +698,10 @@
       if (d.battery != null) telemetryParts.push(`${d.battery}% battery`);
       if (d.status != null) telemetryParts.push(`status: ${d.status}`);
       const telemetryLine = telemetryParts.length ? telemetryParts.join(" · ") : "no telemetry yet";
+
+      const blockedLine = d.blocked && d.blockedUntil
+        ? `<br/>blocked for ${Math.max(0, Math.ceil((d.blockedUntil - Date.now()) / 1000))}s more`
+        : "";
 
       return `
         <div class="device-card">
@@ -703,7 +714,7 @@
           <div class="device-meta">
             pubkey <span class="key-value">${truncateKey(d.publicKey)}</span><br/>
             last auth ${relativeTime(d.lastAuthAt)}<br/>
-            ${telemetryLine}
+            ${telemetryLine}${blockedLine}
           </div>
         </div>
       `;
