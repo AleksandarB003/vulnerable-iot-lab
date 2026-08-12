@@ -447,11 +447,11 @@
   </div>
   <div class="field" id="new-device-temp-field">
     <label for="new-device-temp">Temperature °C</label>
-    <input id="new-device-temp" type="number" placeholder="22" />
+    <input id="new-device-temp" type="number" min="-40" max="85" placeholder="22" />
   </div>
   <div class="field" id="new-device-humidity-field">
     <label for="new-device-humidity">Humidity %</label>
-    <input id="new-device-humidity" type="number" placeholder="45" />
+    <input id="new-device-humidity" type="number" min="0" max="100" placeholder="45" />
   </div>
   <div class="field" id="new-device-status-field">
     <label for="new-device-status">Initial Status</label>
@@ -459,7 +459,7 @@
   </div>
   <div class="field">
     <label for="new-device-battery">Battery %</label>
-    <input id="new-device-battery" type="number" placeholder="100" />
+    <input id="new-device-battery" type="number" min="0" max="100" placeholder="100" />
   </div>
   <button id="add-device-btn">Add device</button>
   <div id="add-device-status"></div>

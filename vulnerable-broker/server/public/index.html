@@ -377,15 +377,15 @@
     </div>
     <div class="field">
       <label for="imp-temp">Temperature °C</label>
-      <input id="imp-temp" type="number" placeholder="optional" />
+      <input id="imp-temp" type="number" min="-40" max="85" placeholder="optional" />
     </div>
     <div class="field">
       <label for="imp-humidity">Humidity %</label>
-      <input id="imp-humidity" type="number" placeholder="optional" />
+      <input id="imp-humidity" type="number" min="0" max="100" placeholder="optional" />
     </div>
     <div class="field">
       <label for="imp-battery">Battery %</label>
-      <input id="imp-battery" type="number" placeholder="optional" />
+      <input id="imp-battery" type="number" min="0" max="100" placeholder="optional" />
     </div>
     <button class="attacker-btn" id="impersonate-btn">Impersonate</button>
   </div>

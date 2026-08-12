@@ -31,6 +31,11 @@ app.get("/events", (req, res) => {
   res.json(getEventsAfter(afterId));
 });
 
+function clamp(value, min, max) {
+  if (typeof value !== "number" || Number.isNaN(value)) return undefined;
+  return Math.min(max, Math.max(min, value));
+}
+
 app.post("/impersonate", (req, res) => {
   const { deviceId, temperature, humidity, battery, status } = req.body || {};
 
@@ -40,9 +45,13 @@ app.post("/impersonate", (req, res) => {
 
   const message = { secret: SHARED_SECRET, timestamp: new Date().toISOString() };
 
-  if (typeof temperature === "number") message.temperature = temperature;
-  if (typeof humidity === "number") message.humidity = humidity;
-  if (typeof battery === "number") message.battery = battery;
+  const clampedTemperature = clamp(temperature, -40, 85);
+  const clampedHumidity = clamp(humidity, 0, 100);
+  const clampedBattery = clamp(battery, 0, 100);
+
+  if (clampedTemperature !== undefined) message.temperature = clampedTemperature;
+  if (clampedHumidity !== undefined) message.humidity = clampedHumidity;
+  if (clampedBattery !== undefined) message.battery = clampedBattery;
   if (typeof status === "string") message.status = status;
 
   mqttClient.publish(`devices/${deviceId}/auth`, JSON.stringify(message));
