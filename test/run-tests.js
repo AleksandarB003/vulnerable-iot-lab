@@ -94,7 +94,17 @@ function runExploit(script, deviceId, timeoutMs = 25000) {
     execFile(
       "node",
       deviceId ? [script, deviceId] : [script],
-      { cwd: EXPLOITS_DIR, timeout: timeoutMs },
+      {
+        cwd: EXPLOITS_DIR,
+        timeout: timeoutMs,
+        env: {
+          ...process.env,
+          MQTT_URL: "mqtt://localhost:1885",
+          SERVER_URL: "http://localhost:3002",
+          VULNERABLE_MQTT_URL: "mqtt://localhost:1884",
+          SECURE_MQTT_URL: "mqtt://localhost:1885",
+        },
+      },
       (error, stdout, stderr) => {
         resolve({ stdout: stdout || "", stderr: stderr || "", timedOut: Boolean(error && error.killed) });
       }
@@ -153,7 +163,7 @@ async function main() {
   await waitForAuthenticatedDevices(VULNERABLE_URL, 3);
   await waitForAuthenticatedDevices(SECURE_URL, 3);
 
-  
+
   const secureDevices = await (await fetch(`${SECURE_URL}/devices`)).json();
   const vulnDevices = await (await fetch(`${VULNERABLE_URL}/devices`)).json();
 
