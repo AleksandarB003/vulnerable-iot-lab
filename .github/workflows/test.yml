@@ -1,0 +1,32 @@
+name: End to end tests
+
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+    branches: [main, dev]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Start the stack
+        run: docker compose --profile vulnerable --profile secure up --build -d
+
+      - name: Run end to end tests
+        run: node test/run-tests.js
+
+      - name: Show container logs on failure
+        if: failure()
+        run: docker compose --profile vulnerable --profile secure logs
+
+      - name: Tear down
+        if: always()
+        run: docker compose --profile vulnerable --profile secure down -v

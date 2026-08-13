@@ -12,6 +12,30 @@ const mqttClient = startMqttListener(brokerUrl);
 app.use(express.static("public"));
 app.use(express.json());
 
+const rateLimitState = new Map();
+
+function rateLimit(maxRequests, windowMs) {
+  return (req, res, next) => {
+    const key = req.ip;
+    const now = Date.now();
+    const entry = rateLimitState.get(key) || { count: 0, windowStart: now };
+
+    if (now - entry.windowStart > windowMs) {
+      entry.count = 0;
+      entry.windowStart = now;
+    }
+
+    entry.count += 1;
+    rateLimitState.set(key, entry);
+
+    if (entry.count > maxRequests) {
+      return res.status(429).json({ error: "Too many requests, slow down" });
+    }
+
+    next();
+  };
+}
+
 app.get("/devices", (req, res) => {
   res.json(getAllDevices());
 });
@@ -36,7 +60,7 @@ function clamp(value, min, max) {
   return Math.min(max, Math.max(min, value));
 }
 
-app.post("/impersonate", (req, res) => {
+app.post("/impersonate", rateLimit(10, 30000), (req, res) => {
   const { deviceId, temperature, humidity, battery, status } = req.body || {};
 
   if (!deviceId || typeof deviceId !== "string") {
@@ -59,7 +83,7 @@ app.post("/impersonate", (req, res) => {
   res.json({ deviceId, published: true });
 });
 
-app.post("/replay", (req, res) => {
+app.post("/replay", rateLimit(10, 30000), (req, res) => {
   const { deviceId } = req.body || {};
 
   if (!deviceId || typeof deviceId !== "string") {
@@ -77,7 +101,7 @@ app.post("/replay", (req, res) => {
   res.json({ deviceId, replayed: true });
 });
 
-app.post("/flood", (req, res) => {
+app.post("/flood", rateLimit(5, 30000), (req, res) => {
   const { deviceId, count } = req.body || {};
 
   if (!deviceId || typeof deviceId !== "string") {

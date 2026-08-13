@@ -519,6 +519,16 @@
 </div>
 
 <script>
+  function escapeHtml(str) {
+    return String(str).replace(/[&<>"']/g, (c) => ({
+      "&": "&amp;",
+      "<": "&lt;",
+      ">": "&gt;",
+      '"': "&quot;",
+      "'": "&#39;",
+    }[c]));
+  }
+
   let lastEventId = 0;
   let autoScroll = true;
   let knownAuthState = {};
@@ -539,7 +549,7 @@
     const previousValue = exploitDeviceSelect.value;
 
     exploitDeviceSelect.innerHTML = devices
-      .map((d) => `<option value="${d.deviceId}">${d.deviceId}</option>`)
+      .map((d) => `<option value="${escapeHtml(d.deviceId)}">${escapeHtml(d.deviceId)}</option>`)
       .join("");
 
     if (devices.some((d) => d.deviceId === previousValue)) {
@@ -706,7 +716,7 @@
       if (d.temperature != null) telemetryParts.push(`${d.temperature}°C`);
       if (d.humidity != null) telemetryParts.push(`${d.humidity}% humidity`);
       if (d.battery != null) telemetryParts.push(`${d.battery}% battery`);
-      if (d.status != null) telemetryParts.push(`status: ${d.status}`);
+      if (d.status != null) telemetryParts.push(`status: ${escapeHtml(d.status)}`);
       const telemetryLine = telemetryParts.length ? telemetryParts.join(" · ") : "no telemetry yet";
 
       const blockedLine = d.blocked && d.blockedUntil
@@ -716,7 +726,7 @@
       return `
         <div class="device-card">
           <div class="row-top">
-            <span class="device-id">${d.deviceId}</span>
+            <span class="device-id">${escapeHtml(d.deviceId)}</span>
             <span class="status-pill ${pillClass}">
               <span class="status-dot ${dotPulseClass}"></span>${pillLabel}
             </span>
@@ -739,7 +749,7 @@
       line.className = "log-line t-" + ev.type;
       line.innerHTML = `
         <span class="log-time">${formatTime(ev.timestamp)}</span>
-        <span class="log-device">${ev.deviceId || "—"}</span>
+        <span class="log-device">${escapeHtml(ev.deviceId || "—")}</span>
         <span class="log-msg">${ev.message}</span>
       `;
       logEl.appendChild(line);

@@ -10,7 +10,7 @@
 import { execFile } from "node:child_process";
 import { setTimeout as sleep } from "node:timers/promises";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.join(__dirname, "..");
@@ -102,7 +102,49 @@ function runExploit(script, deviceId, timeoutMs = 25000) {
   });
 }
 
+async function waitForDeviceTelemetry(url, deviceId, timeoutMs = 15000) {
+  const start = Date.now();
+
+  while (Date.now() - start < timeoutMs) {
+    const res = await fetch(`${url}/devices/${deviceId}`);
+
+    if (res.ok) {
+      const device = await res.json();
+      if (device.temperature != null || device.battery != null) return device;
+    }
+
+    await sleep(1000);
+  }
+
+  return null;
+}
+
+async function testAnomalyGuardUnit() {
+  const modulePath = pathToFileURL(path.join(REPO_ROOT, "secure-broker/server/src/anomalyGuard.js")).href;
+  const { isBlocked, recordFailure, recordSuccess } = await import(modulePath);
+
+  const deviceA = `unit-test-${Date.now()}-a`;
+
+  for (let i = 0; i < 4; i++) recordFailure(deviceA);
+  record("anomalyGuard stays unblocked before the 5th failure", !isBlocked(deviceA));
+
+  recordFailure(deviceA);
+  record("anomalyGuard blocks after 5 consecutive failures", isBlocked(deviceA));
+
+  const deviceB = `unit-test-${Date.now()}-b`;
+
+  recordFailure(deviceB);
+  recordFailure(deviceB);
+  recordSuccess(deviceB);
+  recordFailure(deviceB);
+  recordFailure(deviceB);
+  recordFailure(deviceB);
+  record("anomalyGuard resets the counter on a success", !isBlocked(deviceB));
+}
+
 async function main() {
+  await testAnomalyGuardUnit();
+
   console.log("Waiting for both brokers to come up...");
   await waitForServer(VULNERABLE_URL, "vulnerable broker");
   await waitForServer(SECURE_URL, "secure broker");
@@ -111,7 +153,7 @@ async function main() {
   await waitForAuthenticatedDevices(VULNERABLE_URL, 3);
   await waitForAuthenticatedDevices(SECURE_URL, 3);
 
-
+  
   const secureDevices = await (await fetch(`${SECURE_URL}/devices`)).json();
   const vulnDevices = await (await fetch(`${VULNERABLE_URL}/devices`)).json();
 
@@ -200,7 +242,6 @@ async function main() {
     record("register_hijack forged auth rejected (public key mismatch)", Boolean(rejected), rejected?.message);
   }
 
-
   {
     const afterId = await getLatestEventId(SECURE_URL);
     await runExploit("nonce_spam_burst.js", "sensor-livingroom");
@@ -213,7 +254,6 @@ async function main() {
     record("nonce_spam_burst gets rate limited", rateLimitedCount > 50, `${rateLimitedCount} rate limited`);
   }
 
-
   {
     const result = await runExploit("mitm_sniff.js", null, 25000);
     const sawSecure = result.stdout.includes("[SECURE] connected");
@@ -223,7 +263,6 @@ async function main() {
     record("mitm_sniff connects to both brokers", sawSecure && sawVulnerable);
     record("mitm_sniff captures at least one secure auth message", capturedSecureAuth);
   }
-
 
   {
     const afterId = await getLatestEventId(VULNERABLE_URL);
@@ -244,7 +283,6 @@ async function main() {
     record("vulnerable impersonate: forged device accepted", res.ok && Boolean(success));
   }
 
-
   {
     const afterId = await getLatestEventId(VULNERABLE_URL);
 
@@ -263,7 +301,6 @@ async function main() {
     record("vulnerable replay: captured message accepted again", res.ok && Boolean(success));
   }
 
-  
   {
     const afterId = await getLatestEventId(VULNERABLE_URL);
 
@@ -288,6 +325,41 @@ async function main() {
     );
   }
 
+  {
+    const testId = `test-bounds-impersonate-${Date.now()}`;
+
+    await fetch(`${VULNERABLE_URL}/impersonate`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ deviceId: testId, temperature: 999, humidity: -50, battery: 500 }),
+    });
+
+    const device = await waitForDeviceTelemetry(VULNERABLE_URL, testId);
+
+    record(
+      "bounds validation clamps out-of-range impersonate values",
+      Boolean(device) && device.temperature === 85 && device.humidity === 0 && device.battery === 100,
+      device ? `temp=${device.temperature} humidity=${device.humidity} battery=${device.battery}` : "device not found"
+    );
+  }
+
+  {
+    const testId = `test-bounds-sim-${Date.now()}`;
+
+    await fetch(`${SECURE_URL}/simulated-devices`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ deviceId: testId, type: "sensor", temperature: 999, humidity: -50, battery: 500 }),
+    });
+
+    const device = await waitForDeviceTelemetry(SECURE_URL, testId);
+
+    record(
+      "bounds validation clamps out-of-range device-sim startup values",
+      Boolean(device) && device.temperature <= 85 && device.humidity <= 100 && device.battery <= 100,
+      device ? `temp=${device.temperature} humidity=${device.humidity} battery=${device.battery}` : "device not found"
+    );
+  }
 
   console.log("\n=== Summary ===");
   const failed = results.filter((r) => !r.passed);
