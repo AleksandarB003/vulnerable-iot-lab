@@ -17,6 +17,10 @@ jobs:
         with:
           node-version: 20
 
+      - name: Install exploit dependencies
+        run: npm ci
+        working-directory: exploits
+
       - name: Start the stack
         run: docker compose --profile vulnerable --profile secure up --build -d
 
