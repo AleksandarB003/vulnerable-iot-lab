@@ -109,7 +109,14 @@ function startDevice(deviceId, options = {}) {
     client.subscribe(`devices/${deviceId}/nonce`);
 
     function scheduleNonceRequest() {
-      const nextDelay = 7000 + Math.random() * 2000;
+      const goingOffline = Math.random() < 0.08;
+      const nextDelay = goingOffline
+        ? 15000 + Math.random() * 30000
+        : 7000 + Math.random() * 2000;
+
+      if (goingOffline) {
+        console.log(`Device ${deviceId} going quiet for a bit (simulated offline)`);
+      }
 
       setTimeout(() => {
         client.publish(`devices/${deviceId}/nonce-request`, JSON.stringify({}));

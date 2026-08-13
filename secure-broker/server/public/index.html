@@ -280,6 +280,13 @@
     background: transparent;
   }
 
+  .status-pill.offline {
+    color: var(--text-muted);
+    border-color: var(--border);
+    background: transparent;
+    font-style: italic;
+  }
+
   .status-pill.blocked {
     color: var(--rejected);
     border-color: rgba(248, 113, 113, 0.35);
@@ -688,8 +695,11 @@
       const justAuthenticated = knownAuthState[d.deviceId] === false && d.authenticated === true;
       knownAuthState[d.deviceId] = d.authenticated;
 
-      const pillClass = d.blocked ? "blocked" : d.authenticated ? "auth" : "unauth";
-      const pillLabel = d.blocked ? "blocked" : d.authenticated ? "authenticated" : "not authenticated";
+      const OFFLINE_THRESHOLD_MS = 15000;
+      const isStale = d.authenticated && d.lastAuthAt && (Date.now() - new Date(d.lastAuthAt).getTime() > OFFLINE_THRESHOLD_MS);
+
+      const pillClass = d.blocked ? "blocked" : isStale ? "offline" : d.authenticated ? "auth" : "unauth";
+      const pillLabel = d.blocked ? "blocked" : isStale ? "offline" : d.authenticated ? "authenticated" : "not authenticated";
       const dotPulseClass = justAuthenticated ? "pulse" : "";
 
       const telemetryParts = [];
