@@ -70,7 +70,8 @@ function startDevice(deviceId, options = {}) {
   }
 
   function readBattery() {
-    batteryLevel = Math.min(100, Math.max(0, batteryLevel - Math.random() * 0.05));
+    const drainMultiplier = type === "camera" && currentStatus === "recording" ? 3 : 1;
+    batteryLevel = Math.min(100, Math.max(0, batteryLevel - Math.random() * 0.3 * drainMultiplier));
     return parseFloat(batteryLevel.toFixed(1));
   }
 
