@@ -236,6 +236,13 @@
     background: transparent;
   }
 
+  .status-pill.offline {
+    color: var(--text-muted);
+    border-color: var(--border);
+    background: transparent;
+    font-style: italic;
+  }
+
   .status-dot {
     width: 6px;
     height: 6px;
@@ -377,15 +384,15 @@
     </div>
     <div class="field">
       <label for="imp-temp">Temperature °C</label>
-      <input id="imp-temp" type="number" placeholder="optional" />
+      <input id="imp-temp" type="number" min="-40" max="85" placeholder="optional" />
     </div>
     <div class="field">
       <label for="imp-humidity">Humidity %</label>
-      <input id="imp-humidity" type="number" placeholder="optional" />
+      <input id="imp-humidity" type="number" min="0" max="100" placeholder="optional" />
     </div>
     <div class="field">
       <label for="imp-battery">Battery %</label>
-      <input id="imp-battery" type="number" placeholder="optional" />
+      <input id="imp-battery" type="number" min="0" max="100" placeholder="optional" />
     </div>
     <button class="attacker-btn" id="impersonate-btn">Impersonate</button>
   </div>
@@ -435,6 +442,16 @@
 </div>
 
 <script>
+  function escapeHtml(str) {
+    return String(str).replace(/[&<>"']/g, (c) => ({
+      "&": "&amp;",
+      "<": "&lt;",
+      ">": "&gt;",
+      '"': "&quot;",
+      "'": "&#39;",
+    }[c]));
+  }
+
   let lastEventId = 0;
   let autoScroll = true;
   let knownAuthState = {};
@@ -451,7 +468,7 @@
   const floodDeviceSelect = document.getElementById("flood-device-select");
 
   function updateAttackerDeviceOptions(devices) {
-    const options = devices.map((d) => `<option value="${d.deviceId}">${d.deviceId}</option>`).join("");
+    const options = devices.map((d) => `<option value="${escapeHtml(d.deviceId)}">${escapeHtml(d.deviceId)}</option>`).join("");
 
     for (const select of [replayDeviceSelect, floodDeviceSelect]) {
       const previousValue = select.value;
@@ -589,21 +606,24 @@
       const justAuthenticated = knownAuthState[d.deviceId] === false && d.authenticated === true;
       knownAuthState[d.deviceId] = d.authenticated;
 
-      const pillClass = d.authenticated ? "auth" : "unauth";
-      const pillLabel = d.authenticated ? "authenticated" : "not authenticated";
+      const OFFLINE_THRESHOLD_MS = 15000;
+      const isStale = d.authenticated && d.lastAuthAt && (Date.now() - new Date(d.lastAuthAt).getTime() > OFFLINE_THRESHOLD_MS);
+
+      const pillClass = isStale ? "offline" : d.authenticated ? "auth" : "unauth";
+      const pillLabel = isStale ? "offline" : d.authenticated ? "authenticated" : "not authenticated";
       const dotPulseClass = justAuthenticated ? "pulse" : "";
 
       const telemetryParts = [];
       if (d.temperature != null) telemetryParts.push(`${d.temperature}°C`);
       if (d.humidity != null) telemetryParts.push(`${d.humidity}% humidity`);
       if (d.battery != null) telemetryParts.push(`${d.battery}% battery`);
-      if (d.status != null) telemetryParts.push(`status: ${d.status}`);
+      if (d.status != null) telemetryParts.push(`status: ${escapeHtml(d.status)}`);
       const telemetryLine = telemetryParts.length ? telemetryParts.join(" · ") : "no telemetry yet";
 
       return `
         <div class="device-card">
           <div class="row-top">
-            <span class="device-id">${d.deviceId}</span>
+            <span class="device-id">${escapeHtml(d.deviceId)}</span>
             <span class="status-pill ${pillClass}">
               <span class="status-dot ${dotPulseClass}"></span>${pillLabel}
             </span>
@@ -625,7 +645,7 @@
       line.className = "log-line t-" + ev.type;
       line.innerHTML = `
         <span class="log-time">${formatTime(ev.timestamp)}</span>
-        <span class="log-device">${ev.deviceId || "—"}</span>
+        <span class="log-device">${escapeHtml(ev.deviceId || "—")}</span>
         <span class="log-msg">${ev.message}</span>
       `;
       logEl.appendChild(line);

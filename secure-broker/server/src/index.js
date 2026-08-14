@@ -4,6 +4,7 @@ import path from "node:path";
 import { startMqttListener } from "./mqttHandler.js";
 import { getAllDevices, getDevice } from "./deviceStore.js";
 import { getEventsAfter } from "./eventLog.js";
+import { isBlocked, getBlockedUntil } from "./anomalyGuard.js";
 
 const app = express();
 const PORT = 3000;
@@ -13,6 +14,30 @@ startMqttListener(brokerUrl);
 
 app.use(express.static("public"));
 app.use(express.json());
+
+const rateLimitState = new Map();
+
+function rateLimit(maxRequests, windowMs) {
+  return (req, res, next) => {
+    const key = req.ip;
+    const now = Date.now();
+    const entry = rateLimitState.get(key) || { count: 0, windowStart: now };
+
+    if (now - entry.windowStart > windowMs) {
+      entry.count = 0;
+      entry.windowStart = now;
+    }
+
+    entry.count += 1;
+    rateLimitState.set(key, entry);
+
+    if (entry.count > maxRequests) {
+      return res.status(429).json({ error: "Too many requests, slow down" });
+    }
+
+    next();
+  };
+}
 
 const EXPLOITS_DIR = path.join(process.cwd(), "exploits");
 const EXPLOIT_TIMEOUT_MS = 22000;
@@ -25,7 +50,7 @@ const EXPLOIT_SCRIPTS = {
   mitm_sniff: "mitm_sniff.js",
 };
 
-app.post("/run-exploit", (req, res) => {
+app.post("/run-exploit", rateLimit(5, 30000), (req, res) => {
   const { exploit, deviceId } = req.body || {};
   const scriptFile = EXPLOIT_SCRIPTS[exploit];
 
@@ -66,7 +91,7 @@ const DEVICE_SIM_CONTROL_URLS = {
   vulnerable: "http://vulnerable-device-sim:4000/devices",
 };
 
-app.post("/simulated-devices", async (req, res) => {
+app.post("/simulated-devices", rateLimit(10, 30000), async (req, res) => {
   const { deviceId, type, temperature, humidity, battery, status } = req.body || {};
 
   if (!deviceId) {
@@ -98,9 +123,14 @@ app.post("/simulated-devices", async (req, res) => {
 });
 
 function serializeDevice(device) {
-  return JSON.parse(JSON.stringify(device, (key, value) =>
+  const plain = JSON.parse(JSON.stringify(device, (key, value) =>
     typeof value === "bigint" ? value.toString() : value
   ));
+
+  plain.blocked = isBlocked(device.deviceId);
+  plain.blockedUntil = getBlockedUntil(device.deviceId);
+
+  return plain;
 }
 
 app.get("/devices", (req, res) => {

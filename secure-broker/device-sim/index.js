@@ -22,6 +22,11 @@ function bigIntReplacer(key, value) {
   return typeof value === "bigint" ? value.toString() : value;
 }
 
+function clamp(value, min, max, fallback) {
+  if (typeof value !== "number" || Number.isNaN(value)) return fallback;
+  return Math.min(max, Math.max(min, value));
+}
+
 function buildTelemetry(type, readers) {
   const telemetry = { battery: readers.readBattery() };
 
@@ -45,9 +50,9 @@ const VALID_TYPES = ["sensor", "thermostat", "camera", "door"];
 function startDevice(deviceId, options = {}) {
   const type = VALID_TYPES.includes(options.type) ? options.type : "sensor";
 
-  const tempBase = typeof options.temperature === "number" ? options.temperature : 22;
-  const humidityBase = typeof options.humidity === "number" ? options.humidity : 45;
-  let batteryLevel = typeof options.battery === "number" ? options.battery : 100;
+  const tempBase = clamp(options.temperature, -40, 85, 22);
+  const humidityBase = clamp(options.humidity, 0, 100, 45);
+  let batteryLevel = clamp(options.battery, 0, 100, 100);
 
   const statusOptions = STATUS_OPTIONS[type];
   let currentStatus = statusOptions
@@ -56,16 +61,17 @@ function startDevice(deviceId, options = {}) {
 
   function readTemperature() {
     const variation = (Math.random() * 4 - 2).toFixed(1);
-    return parseFloat((tempBase + parseFloat(variation)).toFixed(1));
+    return clamp(parseFloat((tempBase + parseFloat(variation)).toFixed(1)), -40, 85, tempBase);
   }
 
   function readHumidity() {
     const variation = (Math.random() * 10 - 5).toFixed(1);
-    return parseFloat((humidityBase + parseFloat(variation)).toFixed(1));
+    return clamp(parseFloat((humidityBase + parseFloat(variation)).toFixed(1)), 0, 100, humidityBase);
   }
 
   function readBattery() {
-    batteryLevel = Math.max(0, batteryLevel - Math.random() * 0.05);
+    const drainMultiplier = type === "camera" && currentStatus === "recording" ? 3 : 1;
+    batteryLevel = Math.min(100, Math.max(0, batteryLevel - Math.random() * 0.3 * drainMultiplier));
     return parseFloat(batteryLevel.toFixed(1));
   }
 
@@ -104,7 +110,14 @@ function startDevice(deviceId, options = {}) {
     client.subscribe(`devices/${deviceId}/nonce`);
 
     function scheduleNonceRequest() {
-      const nextDelay = 7000 + Math.random() * 2000;
+      const goingOffline = Math.random() < 0.08;
+      const nextDelay = goingOffline
+        ? 15000 + Math.random() * 30000
+        : 7000 + Math.random() * 2000;
+
+      if (goingOffline) {
+        console.log(`Device ${deviceId} going quiet for a bit (simulated offline)`);
+      }
 
       setTimeout(() => {
         client.publish(`devices/${deviceId}/nonce-request`, JSON.stringify({}));

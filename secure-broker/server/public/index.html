@@ -280,6 +280,19 @@
     background: transparent;
   }
 
+  .status-pill.offline {
+    color: var(--text-muted);
+    border-color: var(--border);
+    background: transparent;
+    font-style: italic;
+  }
+
+  .status-pill.blocked {
+    color: var(--rejected);
+    border-color: rgba(248, 113, 113, 0.35);
+    background: rgba(248, 113, 113, 0.08);
+  }
+
   .status-dot {
     width: 6px;
     height: 6px;
@@ -396,6 +409,7 @@
   .t-register, .t-auth_success { color: var(--success); }
   .t-register_blocked, .t-nonce_rate_limited { color: var(--blocked); }
   .t-auth_rejected { color: var(--rejected); }
+  .t-device_blocked { color: var(--rejected); font-weight: 600; }
   .t-nonce_issued { color: var(--neutral); }
   .t-malformed_message { color: var(--text-muted); }
 
@@ -447,11 +461,11 @@
   </div>
   <div class="field" id="new-device-temp-field">
     <label for="new-device-temp">Temperature °C</label>
-    <input id="new-device-temp" type="number" placeholder="22" />
+    <input id="new-device-temp" type="number" min="-40" max="85" placeholder="22" />
   </div>
   <div class="field" id="new-device-humidity-field">
     <label for="new-device-humidity">Humidity %</label>
-    <input id="new-device-humidity" type="number" placeholder="45" />
+    <input id="new-device-humidity" type="number" min="0" max="100" placeholder="45" />
   </div>
   <div class="field" id="new-device-status-field">
     <label for="new-device-status">Initial Status</label>
@@ -459,7 +473,7 @@
   </div>
   <div class="field">
     <label for="new-device-battery">Battery %</label>
-    <input id="new-device-battery" type="number" placeholder="100" />
+    <input id="new-device-battery" type="number" min="0" max="100" placeholder="100" />
   </div>
   <button id="add-device-btn">Add device</button>
   <div id="add-device-status"></div>
@@ -505,6 +519,16 @@
 </div>
 
 <script>
+  function escapeHtml(str) {
+    return String(str).replace(/[&<>"']/g, (c) => ({
+      "&": "&amp;",
+      "<": "&lt;",
+      ">": "&gt;",
+      '"': "&quot;",
+      "'": "&#39;",
+    }[c]));
+  }
+
   let lastEventId = 0;
   let autoScroll = true;
   let knownAuthState = {};
@@ -525,7 +549,7 @@
     const previousValue = exploitDeviceSelect.value;
 
     exploitDeviceSelect.innerHTML = devices
-      .map((d) => `<option value="${d.deviceId}">${d.deviceId}</option>`)
+      .map((d) => `<option value="${escapeHtml(d.deviceId)}">${escapeHtml(d.deviceId)}</option>`)
       .join("");
 
     if (devices.some((d) => d.deviceId === previousValue)) {
@@ -681,21 +705,28 @@
       const justAuthenticated = knownAuthState[d.deviceId] === false && d.authenticated === true;
       knownAuthState[d.deviceId] = d.authenticated;
 
-      const pillClass = d.authenticated ? "auth" : "unauth";
-      const pillLabel = d.authenticated ? "authenticated" : "not authenticated";
+      const OFFLINE_THRESHOLD_MS = 15000;
+      const isStale = d.authenticated && d.lastAuthAt && (Date.now() - new Date(d.lastAuthAt).getTime() > OFFLINE_THRESHOLD_MS);
+
+      const pillClass = d.blocked ? "blocked" : isStale ? "offline" : d.authenticated ? "auth" : "unauth";
+      const pillLabel = d.blocked ? "blocked" : isStale ? "offline" : d.authenticated ? "authenticated" : "not authenticated";
       const dotPulseClass = justAuthenticated ? "pulse" : "";
 
       const telemetryParts = [];
       if (d.temperature != null) telemetryParts.push(`${d.temperature}°C`);
       if (d.humidity != null) telemetryParts.push(`${d.humidity}% humidity`);
       if (d.battery != null) telemetryParts.push(`${d.battery}% battery`);
-      if (d.status != null) telemetryParts.push(`status: ${d.status}`);
+      if (d.status != null) telemetryParts.push(`status: ${escapeHtml(d.status)}`);
       const telemetryLine = telemetryParts.length ? telemetryParts.join(" · ") : "no telemetry yet";
+
+      const blockedLine = d.blocked && d.blockedUntil
+        ? `<br/>blocked for ${Math.max(0, Math.ceil((d.blockedUntil - Date.now()) / 1000))}s more`
+        : "";
 
       return `
         <div class="device-card">
           <div class="row-top">
-            <span class="device-id">${d.deviceId}</span>
+            <span class="device-id">${escapeHtml(d.deviceId)}</span>
             <span class="status-pill ${pillClass}">
               <span class="status-dot ${dotPulseClass}"></span>${pillLabel}
             </span>
@@ -703,7 +734,7 @@
           <div class="device-meta">
             pubkey <span class="key-value">${truncateKey(d.publicKey)}</span><br/>
             last auth ${relativeTime(d.lastAuthAt)}<br/>
-            ${telemetryLine}
+            ${telemetryLine}${blockedLine}
           </div>
         </div>
       `;
@@ -718,7 +749,7 @@
       line.className = "log-line t-" + ev.type;
       line.innerHTML = `
         <span class="log-time">${formatTime(ev.timestamp)}</span>
-        <span class="log-device">${ev.deviceId || "—"}</span>
+        <span class="log-device">${escapeHtml(ev.deviceId || "—")}</span>
         <span class="log-msg">${ev.message}</span>
       `;
       logEl.appendChild(line);
